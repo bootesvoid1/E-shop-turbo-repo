@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-recommender
+  labels:
+    app: ai-recommender
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-recommender
+  template:
+    metadata:
+      labels:
+        app: ai-recommender
+    spec:
+      containers:
+        - name: ai-recommender
+          image: youracr.azurecr.io/ai-recommender:latest
+          ports:
+            - containerPort: 8001
+          envFrom:
+            - configMapRef:
+                name: ai-recommender-config
+            - secretRef:
+                name: ai-recommender-secrets
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

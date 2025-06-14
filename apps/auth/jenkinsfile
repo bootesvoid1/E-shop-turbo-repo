@@ -1,0 +1,74 @@
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 15, unit: 'MINUTES')
+        cleanWs()
+    }
+
+    environment {
+        APP_NAME = 'auth-microservice'
+        ACR_REGISTRY = 'myacr.azurecr.io'
+        DOCKER_IMAGE = "${APP_NAME}"
+        DOCKER_TAG = "${env.BUILD_NUMBER}" 
+        NODE_VERSION = '22'
+
+        AZURE_CREDENTIALS_ID = 'azure-service-principal'
+        KUBECONFIG_CREDENTIAL_ID = 'kubeconfig'
+        SNYK_CREDENTIALS_ID = 'snyk-api-token'
+        OWASP_ZAP_API_KEY = credentials('owasp-zap-api-key')
+    }
+
+    stages {
+        // ... existing stages ...
+
+        stage('Install Dependencies') {
+            steps {
+                nodejs(nodeJSInstallation: env.NODE_VERSION) {
+                    sh 'npm install'
+                    sh 'npm audit --audit-level=moderate'
+                }
+            }
+        }
+
+        stage('Security Scan - Snyk') {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: env.SNYK_CREDENTIALS_ID, variable: 'SNYK_TOKEN')]) {
+                        sh '''
+                            npm install -g snyk
+                            snyk auth $SNYK_TOKEN
+                            snyk test --severity-threshold=high
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Security Scan - OWASP ZAP') {
+            steps {
+                script {
+                    sh '''
+                        docker pull owasp/zap2docker-stable
+                        # Replace with actual OpenAPI/Swagger spec
+                        docker run -v $(pwd):/zap/wrk -t owasp/zap2docker-stable zap-openapi-scan.py \
+                          -u /zap/wrk/swagger.yaml \
+                          -r zap-report.html
+                    '''
+                }
+            }
+        }
+
+        // Optional: Add e2e tests or reporting here
+    }
+
+    post {
+        success {
+            echo "✅ Deployment successful!"
+        }
+        failure {
+            echo "❌ Deployment failed."
+        }
+    }
+}

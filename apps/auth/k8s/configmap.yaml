@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  # App settings
+  NODE_ENV: "production"
+  PORT: "3001"
+
+  # Database settings
+  DB_HOST: "mysql"
+  DB_PORT: "3306"
+  DB_NAME: "auth_db"
+  DB_USERNAME: "root"
+
+  # JWT settings
+  JWT_SECRET: "your_jwt_secret_key"
+  JWT_EXPIRES_IN: "3600s"
+
+  # Other services
+  USER_SERVICE_URL: "http://user-microservice"

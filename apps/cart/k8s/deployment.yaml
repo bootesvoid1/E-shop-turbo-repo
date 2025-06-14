@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-microservice
+  labels:
+    app: cart-microservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cart-microservice
+  template:
+    metadata:
+      labels:
+        app: cart-microservice
+    spec:
+      containers:
+      - name: cart-microservice
+        image: youracr.azurecr.io/cart-microservice:latest
+        ports:
+        - containerPort: 3004
+        envFrom:
+        - configMapRef:
+            name: cart-config
+        - secretRef:
+            name: cart-secrets
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cart-config
+data:
+  NODE_ENV: "production"
+  PORT: "3004"
+  DATABASE_HOST: "mysql-host"
+  DATABASE_PORT: "3306"
+  DATABASE_USER: "admin"
+  DATABASE_NAME: "e-shop-db"

@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-microservice
+  labels:
+    app: product-microservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-microservice
+  template:
+    metadata:
+      labels:
+        app: product-microservice
+    spec:
+      containers:
+      - name: product-microservice
+        image: youracr.azurecr.io/product-microservice:latest
+        ports:
+        - containerPort: 3003
+        envFrom:
+        - configMapRef:
+            name: product-config
+        - secretRef:
+            name: product-secrets
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: product-config
+data:
+  NODE_ENV: "production"
+  PORT: "3003"
+  DATABASE_HOST: "mysql-host"
+  DATABASE_PORT: "3306"
+  DATABASE_USER: "admin"
+  DATABASE_NAME: "e-shop-db"

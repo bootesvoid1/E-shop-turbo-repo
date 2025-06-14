@@ -1,0 +1,128 @@
+pipeline {
+    agent any
+
+    environment {
+        APP_NAME = 'ai-recommender'
+        ACR_REGISTRY = 'youracr.azurecr.io'
+        DOCKER_IMAGE = "${APP_NAME}"
+        DOCKER_TAG = "${env.BUILD_NUMBER}"
+
+        AZURE_CREDENTIALS_ID = 'azure-service-principal'
+        KUBECONFIG_CREDENTIAL_ID = 'kubeconfig'
+        SNYK_CREDENTIALS_ID = 'snyk-api-token'
+        OWASP_ZAP_API_KEY = credentials('owasp-zap-api-key')
+        EMAIL_RECIPIENT = 'taha.lajili@gmail.com'
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Python Dependencies') {
+            steps {
+                sh 'pip install --no-cache-dir -r requirements.txt'
+            }
+        }
+
+        stage('Linting') {
+            steps {
+                echo "🔧 Linting with flake8 and black..."
+                sh 'flake8 . || echo "Linting warnings found"'
+                sh 'black --check .'
+            }
+        }
+
+        stage('Run Unit Tests') {
+            steps {
+                echo "🧪 Running unit tests..."
+                sh 'pytest'
+            }
+        }
+
+        stage('Security Scan - Bandit') {
+            steps {
+                echo "🛡️ Running Bandit for Python code vulnerabilities..."
+                sh 'bandit -r .'
+            }
+        }
+
+        stage('Secret Scanning') {
+            steps {
+                script {
+                    try {
+                        echo "🕵️‍♂️ Scanning for secrets..."
+                        sh 'npx @slangroom/git-secrets --scan'
+                    } catch (Exception e) {
+                        echo "🚨 Secret detected! Failing build."
+                        currentBuild.result = 'FAILURE'
+                        throw e
+                    }
+                }
+            }
+        }
+
+        stage('Dependency Vulnerability Scan') {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: env.SNYK_CREDENTIALS_ID, variable: 'SNYK_TOKEN')]) {
+                        echo "🔐 Scanning dependencies with Snyk..."
+                        sh '''
+                            npm install -g snyk
+                            snyk auth $SNYK_TOKEN
+                            snyk test --severity-threshold=medium
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo "🏗️ Building Docker image..."
+                sh "docker build -t ${ACR_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG} ."
+            }
+        }
+
+        stage('Push to ACR') {
+            steps {
+                script {
+                    docker.withRegistry("https://${ACR_REGISTRY}",  env.ACR_CREDENTIALS_ID) {
+                        def img = docker.image("${ACR_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}")
+                        img.push()
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to AKS') {
+            steps {
+                echo "☸️ Deploying to Kubernetes..."
+                kubernetesDeploy(
+                    configs: 'k8s/deployment.yaml,k8s/service.yaml',
+                    kubeconfigId: env.KUBECONFIG_CREDENTIAL_ID,
+                    enableConfigSubstitution: true
+                )
+            }
+        }
+    }
+
+    post {
+        success {
+            emailext (
+                subject: "✅ SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: '''Check console output at ${BUILD_URL}''',
+                to: "${EMAIL_RECIPIENT}"
+            )
+        }
+        failure {
+            emailext (
+                subject: "❌ FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+                body: '''Something went wrong. Please check: ${BUILD_URL}''',
+                to: "${EMAIL_RECIPIENT}"
+            )
+        }
+    }
+}
