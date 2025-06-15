@@ -8,17 +8,15 @@ pipeline {
     }
 
     environment {
-        APP_NAME = 'auth-microservice'
+        APP_NAME = 'user'
         ACR_REGISTRY = 'myacr.azurecr.io'
-        DOCKER_IMAGE = "${APP_NAME}"
+        DOCKER_IMAGE = "${APP_NAME}-microservice"
         DOCKER_TAG = "${env.BUILD_NUMBER}"
         NODE_VERSION = '22'
 
         AZURE_CREDENTIALS_ID = 'azure-service-principal'
         KUBECONFIG_CREDENTIAL_ID = 'kubeconfig'
         SNYK_CREDENTIALS_ID = 'snyk-api-token'
-        OWASP_ZAP_API_KEY = credentials('owasp-zap-api-key')
-        EMAIL_RECIPIENT = 'taha.lajili@gmail.com'
     }
 
     stages {
@@ -37,18 +35,31 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    sh 'node -v'
+                    echo "🔧 Installing pnpm globally"
                     sh 'npm install -g pnpm'
+                    
+                    echo "📦 Installing dependencies"
                     sh 'pnpm install --frozen-lockfile'
                 }
             }
         }
 
-        stage('Build Auth Microservice') {
+        stage('Build App') {
             steps {
                 script {
                     echo "🏗️ Building ${APP_NAME} using Turbo"
                     sh "pnpm turbo run build --filter=${APP_NAME}"
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                script {
+                    echo "🧪 Running unit tests for ${APP_NAME}"
+                    sh "pnpm turbo run test --filter=${APP_NAME}"
+
+                    echo "✅ Test coverage complete"
                 }
             }
         }
@@ -59,6 +70,7 @@ pipeline {
             }
             steps {
                 script {
+                    echo "🔐 Running Snyk Security Scan"
                     withCredentials([string(credentialsId: env.SNYK_CREDENTIALS_ID, variable: 'SNYK_TOKEN')]) {
                         sh '''
                             npm install -g snyk
@@ -70,36 +82,18 @@ pipeline {
             }
         }
 
-        stage('Security Scan - OWASP ZAP') {
-            when {
-                branch 'main'
-            }
-            steps {
-                script {
-                    sh '''
-                        docker pull owasp/zap2docker-stable
-                        # Replace with actual OpenAPI/Swagger spec path
-                        docker run -v $(pwd):/zap/wrk -t owasp/zap2docker-stable zap-openapi-scan.py \
-                          -u /zap/wrk/swagger.yaml \
-                          -r zap-report.html
-                    '''
-                }
-            }
-        }
-
-        stage('Docker Build & Push') {
+        stage('Build & Push Docker Image') {
             steps {
                 script {
                     echo "🐋 Building Docker image for ${DOCKER_IMAGE}:${DOCKER_TAG}"
-
-                    // Go into the service directory
                     dir("apps/${APP_NAME}") {
                         sh "docker build -t ${ACR_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG} ."
                     }
 
-                    echo "⬆️ Pushing to Azure Container Registry"
+                    echo "⬆️ Logging into Azure Container Registry"
                     sh """
-                        docker login ${ACR_REGISTRY} -u 00000000-0000-0000-0000-000000000000 -p \$(az acr credential show -n myacr --query passwords[0].value -o tsv)
+                        az acr login --name myacr
+                        docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${ACR_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}
                         docker push ${ACR_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}
                     """
                 }
@@ -111,10 +105,12 @@ pipeline {
                 script {
                     echo "☸️ Deploying to Kubernetes"
 
-                    // Inject kubeconfig
                     withKubeConfig(configName: env.KUBECONFIG_CREDENTIAL_ID) {
-                        dir("infra/k8s") {
+                        dir("infra/k8s/user") {
+                            echo "Updating image in deployment.yaml"
                             sh "sed -i 's|image: .*|image: ${ACR_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}|' deployment.yaml"
+
+                            echo "Applying K8s manifests"
                             sh "kubectl apply -f configmap.yaml"
                             sh "kubectl apply -f secret.yaml"
                             sh "kubectl apply -f deployment.yaml"
@@ -128,10 +124,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Deployment successful!"
+            echo "✅ Deployment of ${APP_NAME} successful!"
         }
         failure {
-            echo "❌ Deployment failed."
+            echo "❌ Failed to deploy ${APP_NAME}."
         }
     }
 }

@@ -7,12 +7,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CartEntity } from '@bootesvoid1/shared-entities';
-import { USER_MESSAGE_PATTERNS, PRODUCT_MESSAGE_PATTERNS } from '@bootesvoid1/shared-entities';
+import { CartEntity } from '@repo/shared-entities';
+import { USER_MESSAGE_PATTERNS, PRODUCT_MESSAGE_PATTERNS } from '@repo/shared-entities';
 import { ClientProxy } from '@nestjs/microservices';
 import { Inject } from '@nestjs/common';
-import { CreateCartDto } from '@bootesvoid1/shared-entities';
-import {UpdateCartDto} from '@bootesvoid1/shared-entities';
+import { CreateCartDto } from '@repo/shared-entities';
+import {UpdateCartDto} from '@repo/shared-entities';
 @Injectable()
 export class CartService {
   constructor(

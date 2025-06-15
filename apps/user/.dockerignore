@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+*.log
+*.md
+*.spec.ts
+*.test.ts
+.env.local
+.env.development

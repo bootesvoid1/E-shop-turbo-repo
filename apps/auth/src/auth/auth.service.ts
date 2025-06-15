@@ -9,7 +9,7 @@ import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom, TimeoutError } from 'rxjs';
 import { SignInUserDto } from './dto/signin-user.dto';
 import { JwtPayload, UserPayload } from 'src/models/types';
-import { MailService } from 'src/mail/mail.service';
+import { MailService } from '@repo/shared-entities';
 
 @Injectable()
 export class AuthService {

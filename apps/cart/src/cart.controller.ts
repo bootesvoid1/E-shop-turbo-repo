@@ -1,9 +1,9 @@
   import { BadRequestException, Controller } from '@nestjs/common';
   import { MessagePattern, Payload } from '@nestjs/microservices';
-  import { CART_MESSAGE_PATTERNS } from '@bootesvoid1/shared-entities/dist/modules/rabbitmq/patterns.enum';
+  import { CART_MESSAGE_PATTERNS } from '@repo/shared-entities/dist/modules/rabbitmq/patterns.enum';
   import { CartService } from './cart.service';
-  import { CreateCartDto } from '@bootesvoid1/shared-entities/dist/dto/create-cart.dto';
-  import {UpdateCartDto} from '@bootesvoid1/shared-entities/dist/dto/update-cart.dto';
+  import { CreateCartDto } from '@repo/shared-entities/dist/dto/create-cart.dto';
+  import {UpdateCartDto} from '@repo/shared-entities/dist/dto/update-cart.dto';
   @Controller()
   export class CartController {
     constructor(private readonly cartService: CartService) {}

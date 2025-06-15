@@ -2,8 +2,8 @@ import { Module } from '@nestjs/common';
 import { CartController } from './cart.controller';
 import { CartService } from './cart.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CartEntity } from '@bootesvoid1/shared-entities';
-import { RabbitMQModule } from '@bootesvoid1/shared-entities';
+import { CartEntity } from '@repo/shared-entities';
+import { RabbitMQModule } from '@repo/shared-entities';
 
 @Module({
   imports: [

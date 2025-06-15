@@ -1,29 +1,24 @@
-# deployment.yaml for auth
+# deployment.yaml for user
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: auth-microservice
+  name: user-microservice
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: auth
+      app: user
   template:
     metadata:
       labels:
-        app: auth
+        app: user
     spec:
       containers:
-        - name: auth
-          image: myacr.azurecr.io/auth-microservice:latest
+        - name: user
+          image: myacr.azurecr.io/user-microservice:latest
           ports:
-            - containerPort: 3001
+            - containerPort: 3000
           env:
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: auth-secrets
-                  key: JWT_SECRET
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
