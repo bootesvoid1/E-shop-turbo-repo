@@ -14,7 +14,6 @@ data:
   DB_USERNAME: "root"
 
   # JWT settings
-  JWT_SECRET: "your_jwt_secret_key"
   JWT_EXPIRES_IN: "3600s"
 
   # Other services
