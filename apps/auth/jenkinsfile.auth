@@ -12,6 +12,10 @@ pipeline {
         DOCKER_IMAGE = "${APP_NAME}"
         DOCKER_TAG = "${env.BUILD_NUMBER}"
         NODE_VERSION = '22'
+        K8S_NAMESPACE = 'default' // Adjust if using a specific namespace
+        SERVICE_URL = "http://auth-microservice" // Fallback URL
+        KEYVAULT_NAME = 'your-keyvault-name' // Replace with actual Key Vault name
+        RESOURCE_GROUP = 'your-resource-group' // Replace with actual resource group
 
         AZURE_CREDENTIALS_ID = 'azure-service-principal'
         KUBECONFIG_CREDENTIAL_ID = 'kubeconfig'
@@ -39,19 +43,6 @@ pipeline {
             }
         }
 
-        stage('Security Scan - OWASP ZAP') {
-            steps {
-                sh '''
-                    docker pull securecodebox/zap
-                    docker run --rm -v $(pwd):/zap/wrk -t securecodebox/zap zap-openapi-scan.py \
-                      -u /zap/wrk/swagger.yaml \
-                      -r zap-report.html \
-                      -z "-config api.disablekey=true"
-                    docker rm -f zap || true
-                '''
-            }
-        }
-
         stage('Build and Push Docker Image') {
             steps {
                 withCredentials([azureServicePrincipal(credentialsId: env.AZURE_CREDENTIALS_ID,
@@ -69,18 +60,65 @@ pipeline {
             }
         }
 
+        stage('Update Kubernetes Manifests') {
+            steps {
+                withCredentials([azureServicePrincipal(credentialsId: env.AZURE_CREDENTIALS_ID,
+                    subscriptionIdVariable: 'AZURE_SUBSCRIPTION_ID',
+                    clientIdVariable: 'AZURE_CLIENT_ID',
+                    clientSecretVariable: 'AZURE_CLIENT_SECRET',
+                    tenantIdVariable: 'AZURE_TENANT_ID')]) {
+                    sh '''
+                        # Update deployment.yaml: image tag and secret names
+                        sed -i "s|image:.*|image: ${ACR_REGISTRY}/${DOCKER_IMAGE}:${DOCKER_TAG}|" apps/auth/k8s/deployment.yaml
+                        sed -i "s|name: auth-secrets|name: app-secrets|" apps/auth/k8s/deployment.yaml
+                        sed -i "s|name: user-secrets|name: app-secrets|" apps/auth/k8s/deployment.yaml
+                        # Remove JWT_SECRET from configmap.yaml
+                        sed -i "/JWT_SECRET/d" apps/auth/k8s/configmap.yaml
+                        # Update secret-provider-class.yaml with Azure credentials
+                        sed -i "s|keyvaultName:.*|keyvaultName: ${KEYVAULT_NAME}|" apps/auth/k8s/secret-provider-class.yaml
+                        sed -i "s|resourceGroup:.*|resourceGroup: ${RESOURCE_GROUP}|" apps/auth/k8s/secret-provider-class.yaml
+                        sed -i "s|subscriptionId:.*|subscriptionId: ${AZURE_SUBSCRIPTION_ID}|" apps/auth/k8s/secret-provider-class.yaml
+                        sed -i "s|tenantId:.*|tenantId: ${AZURE_TENANT_ID}|" apps/auth/k8s/secret-provider-class.yaml
+                    '''
+                }
+            }
+        }
+
         stage('Deploy to AKS') {
             steps {
                 withCredentials([file(credentialsId: env.KUBECONFIG_CREDENTIAL_ID, variable: 'KUBECONFIG')]) {
                     sh '''
                         export KUBECONFIG=$KUBECONFIG
-                        kubectl apply -f apps/auth/k8s/configmap.yaml
-                        kubectl apply -f apps/auth/k8s/secret-provider-class.yaml
-                        kubectl apply -f apps/auth/k8s/secrets.yaml
-                        kubectl apply -f apps/auth/k8s/service.yaml
-                        kubectl apply -f apps/auth/k8s/deployment.yaml
+                        kubectl apply -f apps/auth/k8s/configmap.yaml --namespace ${K8S_NAMESPACE}
+                        kubectl apply -f apps/auth/k8s/secret-provider-class.yaml --namespace ${K8S_NAMESPACE}
+                        kubectl apply -f apps/auth/k8s/secrets.yaml --namespace ${K8S_NAMESPACE}
+                        kubectl apply -f apps/auth/k8s/service.yaml --namespace ${K8S_NAMESPACE}
+                        kubectl apply -f apps/auth/k8s/deployment.yaml --namespace ${K8S_NAMESPACE}
                     '''
                 }
+            }
+        }
+
+        stage('Security Scan - OWASP ZAP') {
+            steps {
+                sh '''
+                    # Wait for the service to be available
+                    for i in {1..30}; do
+                        kubectl get svc auth-microservice --namespace ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].ip}' && break
+                        sleep 10
+                    done
+                    export SERVICE_IP=$(kubectl get svc auth-microservice --namespace ${K8S_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                    if [ -z "$SERVICE_IP" ]; then
+                        echo "Failed to get LoadBalancer IP"
+                        exit 1
+                    fi
+                    docker pull securecodebox/zap
+                    docker run --rm -t securecodebox/zap zap-baseline.py \
+                      -t http://$SERVICE_IP \
+                      -r zap-report.html \
+                      -z "-config api.disablekey=true"
+                    docker rm -f zap || true
+                '''
             }
         }
     }
