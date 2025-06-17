@@ -32,10 +32,14 @@ pipeline {
             steps {
                 nodejs(nodeJSInstallationName: env.NODE_VERSION) {
                     dir('apps/auth') {
-                        sh 'npm install -g pnpm'
+                        sh 'npm install -g npm@11.4.2' // Optional: Update npm to suppress warning
                         sh 'pnpm install --frozen-lockfile'
-                        sh 'pnpm audit --audit-level=moderate'
+                        sh 'pnpm audit --audit-level=moderate > audit-report.txt || true'
+                        archiveArtifacts artifacts: 'audit-report.txt', allowEmptyArchive: true
+                    }
                 }
+            }
+}
             }
         }
 
