@@ -22,8 +22,21 @@ pipeline {
     }
 
     stages {
+        stage('Declarative: Checkout SCM') {
+            steps {
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[url: 'https://github.com/bootesvoid1/E-shop-turbo-repo']],
+                    extensions: [[$class: 'CleanBeforeCheckout']],
+                    doGenerateSubmoduleConfigurations: false,
+                    submoduleCfg: []
+                ])
+            }
+        }
+
         stage('Clean Workspace') {
             steps {
+                sh 'ls -R apps/auth || true'
                 cleanWs()
             }
         }
@@ -33,6 +46,7 @@ pipeline {
                 nodejs(nodeJSInstallationName: env.NODE_VERSION) {
                     dir('apps/auth') {
                         sh '''
+                            ls -la
                             if [ ! -f package.json ]; then
                                 echo "Error: package.json not found in apps/auth"
                                 exit 1
@@ -52,6 +66,7 @@ pipeline {
                 withCredentials([string(credentialsId: env.SNYK_CREDENTIALS_ID, variable: 'SNYK_TOKEN')]) {
                     dir('apps/auth') {
                         sh '''
+                            ls -la
                             if [ ! -f package.json ]; then
                                 echo "Error: package.json not found in apps/auth"
                                 exit 1
