@@ -22,7 +22,13 @@ pipeline {
     }
 
     stages {
-        stage('Declarative: Checkout SCM') {
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Checkout SCM') {
             steps {
                 checkout([$class: 'GitSCM',
                     branches: [[name: '*/main']],
@@ -31,13 +37,6 @@ pipeline {
                     doGenerateSubmoduleConfigurations: false,
                     submoduleCfg: []
                 ])
-            }
-        }
-
-        stage('Clean Workspace') {
-            steps {
-                sh 'ls -R apps/auth || true'
-                cleanWs()
             }
         }
 
