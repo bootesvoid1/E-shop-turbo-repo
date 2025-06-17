@@ -1,43 +1,31 @@
 # STAGE 1: Build the NestJS app (using pnpm and Turborepo)
-FROM node:22 as builder
-
+FROM node:22.9.0 AS builder
 WORKDIR /app
-
-# Copy workspace files first to leverage caching
-COPY pnpm-lock.yaml ./
-COPY package.json ./
-COPY turbo.json ./
-
+# Copy workspace files for caching
+COPY pnpm-lock.yaml package.json turbo.json ./
 # Install pnpm globally
 RUN npm install -g pnpm
-
 # Install root dependencies
 RUN pnpm install --frozen-lockfile
-
 # Copy source code
-COPY . .
-
-# Build only the auth service and its dependencies
+COPY apps/auth ./apps/auth
+# Build only the auth service
 RUN pnpm turbo run build --filter=auth
-
-# Optional: Run tests if needed in CI
+# Optional: Run tests in CI
 # RUN pnpm turbo run test --filter=auth
 
 # STAGE 2: Create lightweight production image
-FROM node:22-alpine
-
+FROM node:22.9.0-alpine
 WORKDIR /app
-
-# Copy built output from builder stage
+# Copy built output and dependencies
 COPY --from=builder /app/dist/apps/auth ./dist
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
-
-# Copy environment file (if exists)
-COPY --from=builder /app/auth/.env.local ./.env
-
-# Expose the port your app listens on
+COPY --from=builder /app/package.json ./  # For npm scripts, if needed
+# Set production environment
+ENV NODE_ENV=production
+# Run as non-root user
+USER node
+# Expose port
 EXPOSE 3001
-
 # Start the app
 CMD ["node", "dist/main"]
